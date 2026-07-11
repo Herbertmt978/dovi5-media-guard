@@ -53,7 +53,7 @@ if ! flock -n 9; then
     exit 0
 fi
 
-for dependency in find flock mediainfo mountpoint realpath timeout "$PYTHON_BIN"; do
+for dependency in find flock head mediainfo mountpoint realpath timeout "$PYTHON_BIN"; do
     command -v "$dependency" >/dev/null 2>&1 || fatal "missing dependency: $dependency"
 done
 command -v "$FFPROBE_BIN" >/dev/null 2>&1 || fatal "missing dependency: $FFPROBE_BIN"
@@ -67,7 +67,10 @@ command -v "$FFMPEG_BIN" >/dev/null 2>&1 || fatal "missing dependency: $FFMPEG_B
 [[ "$MAX_VALIDATION_DELETIONS_PER_RUN" =~ ^[0-9]+$ ]] || fatal "MAX_VALIDATION_DELETIONS_PER_RUN must be a non-negative integer"
 for timeout_value in "$FIND_TIMEOUT_SECONDS" "$FINGERPRINT_TIMEOUT_SECONDS" "$MEDIAINFO_TIMEOUT_SECONDS" \
     "$FFPROBE_TIMEOUT_SECONDS" "$FFMPEG_TIMEOUT_SECONDS"; do
-    [[ "$timeout_value" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]] || fatal "timeout settings must be numeric"
+    if [[ ! "$timeout_value" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]] || \
+        [[ "$timeout_value" =~ ^0*[.]?0*$ ]]; then
+        fatal "timeout settings must be positive numbers"
+    fi
 done
 
 canonical_mount="$(realpath -e -- "$MEDIA_MOUNTPOINT" 2>/dev/null)" || fatal "media mountpoint does not exist"
@@ -329,7 +332,13 @@ validate_failed_media() {
             return 0
         fi
         : >"$VALIDATION_ERROR_FILE"
-        if ! IFS= read -r -N 4 magic <"$media_path" 2>"$VALIDATION_ERROR_FILE"; then
+        # Open the media path inside the bounded child so the Matroska read is
+        # subject to the validator deadline on ordinary userspace I/O stalls.
+        magic="$(
+            timeout --signal=TERM --kill-after=5s "$FFPROBE_TIMEOUT_SECONDS" \
+                head -c 4 -- "$media_path" 2>"$VALIDATION_ERROR_FILE"
+        )" || return 0
+        if ((${#magic} != 4)); then
             return 0
         fi
         if [[ "$magic" != $'\x1a\x45\xdf\xa3' ]]; then

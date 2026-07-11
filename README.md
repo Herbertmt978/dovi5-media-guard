@@ -71,7 +71,7 @@ If you installed for another account, replace `/home/frigate` with that account'
 
 ## Requirements
 
-- Linux with systemd, GNU userland tools (`find`, `timeout`, `realpath`, `getent`), and util-linux tools (`flock`, `mountpoint`, `runuser`). A non-root installer invocation also needs `sudo`.
+- Linux with systemd, GNU userland tools (`find`, `head`, `timeout`, `realpath`, `getent`), and util-linux tools (`flock`, `mountpoint`, `runuser`). A non-root installer invocation also needs `sudo`.
 - Python 3.10 or newer.
 - MediaInfo plus a matched FFmpeg/FFprobe pair with H.264 and HEVC decoders and Matroska and MP4 demuxers. The installer can add distro packages with `apt-get` when they are missing.
 - An existing target account (default `frigate`) with `/home/<TARGET_USER>` and an existing `media` group.
@@ -117,7 +117,7 @@ RADARR_FILMSHD_URL=http://radarr-hd.example.invalid:7878
 RADARR_FILMSHD_API_KEY=
 ```
 
-Keep API keys only in the deployed mode-`0600` file, never in Git or issue reports. Defaults for timeouts, minimum file age, state compaction, and the validation-deletion circuit breaker are documented in [`dovi5-frigate-ops.env.example`](dovi5-frigate-ops.env.example).
+Keep API keys only in the deployed mode-`0600` file, never in Git or issue reports. Defaults for timeouts, minimum file age, state compaction, and the validation-deletion circuit breaker are documented in [`dovi5-frigate-ops.env.example`](dovi5-frigate-ops.env.example). Every scanner timeout must be greater than zero; GNU `timeout` treats zero as having no deadline, so the scanner rejects it.
 
 Check configuration and API access without printing keys:
 
@@ -151,7 +151,7 @@ Only the source path is deleted. Sidecars and now-empty directories are left alo
 
 The validator proves only that the local container and primary video stream can be inspected and that the installed FFmpeg can software-decode one sampled frame. It does not perform full playback, test every frame, inspect audio/subtitle compatibility, or emulate Plex/Infuse routing, licensed Dolby Vision rendering, Apple TV or Shield hardware decoders, HDMI, an AVR, or a display.
 
-Having the right codecs on the Linux host therefore does **not** prove Apple TV or Shield compatibility. Profile 5 remains a separate deletion policy based on your observed playback. A narrow race remains between the final fingerprint check and filesystem deletion; changing media in place while a scan runs is unsupported.
+Having the right codecs on the Linux host therefore does **not** prove Apple TV or Shield compatibility. Profile 5 remains a separate deletion policy based on your observed playback. A narrow race remains between the final fingerprint check and filesystem deletion; changing media in place while a scan runs is unsupported. A userspace deadline also cannot terminate Linux I/O stuck in an uninterruptible kernel state, so network mounts still need suitable client and server timeouts.
 
 Tabs and newlines in filenames are handled by null-delimited enumeration and an independent re-probe before deletion.
 

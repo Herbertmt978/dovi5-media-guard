@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## [1.1.1] - 2026-07-11
+
+### Fixed
+
+- Bounded the Matroska header probe and rejected zero-valued probe timeouts, which GNU `timeout` otherwise treats as having no deadline.
+
 ## [1.1.0] - 2026-07-11
 
 ### Added
@@ -26,4 +32,5 @@ All notable changes to this project are documented here.
 
 - Initial private deployment of the Profile 5 delete-and-recover scanner.
 
+[1.1.1]: https://github.com/Herbertmt978/dovi5-media-guard/releases/tag/v1.1.1
 [1.1.0]: https://github.com/Herbertmt978/dovi5-media-guard/releases/tag/v1.1.0

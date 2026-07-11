@@ -11,6 +11,7 @@ else
 fi
 FIND_REAL="$(command -v find)"
 RM_REAL="$(command -v rm)"
+HEAD_REAL="$(command -v head)"
 
 fail() {
     echo "FAIL: $*" >&2
@@ -170,6 +171,21 @@ esac
 STUB
     chmod +x "$bin_dir/ffmpeg"
 
+    cat >"$bin_dir/head" <<'STUB'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+printf '%s\n' "$*" >>"${HEAD_LOG:?}"
+if [[ "${HEAD_MODE:-normal}" == "timeout" ]]; then
+    trap 'kill "$sleep_pid" 2>/dev/null || true; exit 143' TERM
+    sleep 5 &
+    sleep_pid=$!
+    wait "$sleep_pid"
+    : >"${HEAD_COMPLETED_MARKER:?}"
+fi
+exec "${HEAD_REAL:?}" "$@"
+STUB
+    chmod +x "$bin_dir/head"
+
     cat >"$bin_dir/find" <<STUB
 #!/usr/bin/env bash
 set -Eeuo pipefail
@@ -247,6 +263,7 @@ setup_work() {
     : >"$work/mediainfo.log"
     : >"$work/ffprobe.log"
     : >"$work/ffmpeg.log"
+    : >"$work/head.log"
     : >"$work/find.log"
     : >"$work/rm.log"
     : >"$work/stat.log"
@@ -293,6 +310,9 @@ run_script() {
         MEDIAINFO_LOG="$work/mediainfo.log" \
         FFPROBE_LOG="$work/ffprobe.log" \
         FFMPEG_LOG="$work/ffmpeg.log" \
+        HEAD_REAL="$HEAD_REAL" \
+        HEAD_LOG="$work/head.log" \
+        HEAD_COMPLETED_MARKER="$work/head.completed" \
         MEDIAINFO_CHANGE_MARKER="$work/change.marker" \
         FIND_LOG="$work/find.log" \
         FIND_CTIME_FROM_MTIME=1 \
@@ -380,6 +400,10 @@ test_servarr_dry_run_fails_closed_before_scanning_or_deleting() {
     assert_line_count 0 "$work/rm.log"
     assert_missing "$work/outbox.sqlite3"
     assert_contains "$work/logs/move_dovi5_to_quarantine.log" "SERVARR_DRY_RUN=1"
+}
+
+test_zero_timeout_fails_closed_before_scanning_or_deleting() {
+    assert_invalid_setup_is_fail_closed "zero timeout" FFPROBE_TIMEOUT_SECONDS=0
 }
 
 test_other_profiles_are_cached_and_validated_no_video_is_cached_after_retry() {
@@ -653,6 +677,29 @@ test_validator_timeout_retains() {
         assert_no_outbox "$work"
         assert_latest_state_status "$work/checked.tsv" "$src" "validation_failed_once"
     done
+}
+
+test_mkv_header_probe_timeout_retains() {
+    local work
+    work="$(mktemp -d)"
+    setup_work "$work"
+    local src="$work/media/PlexTV/Header Timeout NoVideo.mkv"
+    write_ebml_prefixed_fixture "$src" "validator header timeout fixture"
+    age_file "$src"
+
+    run_script "$work"
+    run_script "$work" HEAD_MODE=timeout FFPROBE_TIMEOUT_SECONDS=0.1
+
+    assert_exists "$src"
+    assert_line_count 2 "$work/mediainfo.log"
+    assert_line_count 1 "$work/head.log"
+    assert_contains "$work/head.log" "-c 4 -- $src"
+    assert_missing "$work/head.completed"
+    assert_line_count 0 "$work/ffprobe.log"
+    assert_line_count 0 "$work/ffmpeg.log"
+    assert_line_count 0 "$work/rm.log"
+    assert_no_outbox "$work"
+    assert_latest_state_status "$work/checked.tsv" "$src" "validation_failed_once"
 }
 
 test_validator_resource_and_capability_failures_retain() {
@@ -1050,6 +1097,7 @@ fi
 test_default_lock_is_created_beside_servarr_outbox_db
 test_confirmed_aged_stable_dovi5_deletes_only_source_after_durable_enqueue
 test_servarr_dry_run_fails_closed_before_scanning_or_deleting
+test_zero_timeout_fails_closed_before_scanning_or_deleting
 test_other_profiles_are_cached_and_validated_no_video_is_cached_after_retry
 test_blank_missing_unmounted_duplicate_and_overlapping_roots_fail_closed
 test_first_failure_is_recorded_and_retained
@@ -1060,6 +1108,7 @@ test_ffprobe_profile5_bypasses_validation_circuit_breaker
 test_second_unchanged_decode_failure_deletes
 test_validator_success_retains_and_caches
 test_validator_timeout_retains
+test_mkv_header_probe_timeout_retains
 test_validator_resource_and_capability_failures_retain
 test_changed_failure_restarts_retry
 test_compaction_preserves_failed_once_retry
