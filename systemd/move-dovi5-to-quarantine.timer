@@ -1,0 +1,12 @@
+[Unit]
+Description=Run DoVi 5 delete-and-recover scan every 15 minutes
+
+[Timer]
+OnBootSec=10min
+OnActiveSec=15min
+OnUnitInactiveSec=15min
+Persistent=true
+Unit=move-dovi5-to-quarantine.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local credentials and overrides
+*.env
+*.env.*
+!*.env.example
+
+# Runtime logs, state, locks, databases, and backups
+*.log
+*.tsv
+*.lock
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+servarr-dovi-profile-backup-*.json
+
+# Local security and test reports
+bandit-report.*
+gitleaks-report.*
